@@ -23,7 +23,7 @@ parser.add_argument('--pin',           required=True)
 parser.add_argument('--gauge-id',      default='09506000')
 parser.add_argument('--ar-order',      type=int, default=7)
 parser.add_argument('--forecast-date', default='2024-04-30')
-parser.add_argument('--model',         default='longterm_avg', choices=['longterm_avg'])
+parser.add_argument('--model',         default='longterm_avg', choices=['longterm_avg', 'day_of_week'])
 args = parser.parse_args()
 
 forecast_date_ts = pd.Timestamp(args.forecast_date)
@@ -54,6 +54,26 @@ for date, row in forecast_df.iterrows():
     print(f"  {str(date.date()):<14}  {row['Forecast_cfs']:.1f}")
 
 recent_cfs = recent['streamflow_cfs'].iloc[-30:]
+
+# ── Day of week model ─────────────────────────────────────────────────────────
+if args.model == 'day_of_week':
+    print("\n--- Step 2: Load day-of-week model ---")
+    dow_flows = load_model()
+    if not isinstance(dow_flows, dict):
+        raise TypeError(
+            "saved_model.pkl does not contain a day_of_week model. "
+            "Re-run train_model.py with --refit True --model day_of_week first."
+        )
+    print("\n--- Step 3: Generate 5-day day-of-week forecast ---")
+    dates = pd.date_range(start=args.forecast_date, periods=5, freq='D')
+    days  = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
+    forecast_values = [dow_flows[d.weekday()] for d in dates]
+    forecast_df = pd.DataFrame({'Forecast_cfs': forecast_values}, index=dates)
+    model_label = 'Day of Week'
+
+    print("\n  Day-of-week assignments for forecast period:")
+    for d, v in zip(dates, forecast_values):
+        print(f"    {days[d.weekday()]:<12}: {v:.1f} cfs")
 
 fig, ax = plt.subplots(figsize=(10, 4))
 ax.plot(recent_cfs.index, recent_cfs.values,
