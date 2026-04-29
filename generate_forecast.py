@@ -46,15 +46,6 @@ if args.model == 'longterm_avg':
     forecast_df = make_5day_forecast_longterm(mean_flow, args.forecast_date)
     model_label = 'Long-term Average'
 
-print(f"\n  5-Day Streamflow Forecast — Verde River ({model_label})")
-print(f"  Starting: {forecast_date_ts.date()}\n")
-print(f"  {'Date':<14}  Forecast (cfs)")
-print(f"  {'-'*30}")
-for date, row in forecast_df.iterrows():
-    print(f"  {str(date.date()):<14}  {row['Forecast_cfs']:.1f}")
-
-recent_cfs = recent['streamflow_cfs'].iloc[-30:]
-
 # ── Day of week model ─────────────────────────────────────────────────────────
 if args.model == 'day_of_week':
     print("\n--- Step 2: Load day-of-week model ---")
@@ -74,6 +65,16 @@ if args.model == 'day_of_week':
     print("\n  Day-of-week assignments for forecast period:")
     for d, v in zip(dates, forecast_values):
         print(f"    {days[d.weekday()]:<12}: {v:.1f} cfs")
+
+# ── Print and plot ─────────────────────────────────────────────────────────────
+print(f"\n  5-Day Streamflow Forecast — Verde River ({model_label})")
+print(f"  Starting: {forecast_date_ts.date()}\n")
+print(f"  {'Date':<14}  Forecast (cfs)")
+print(f"  {'-'*30}")
+for date, row in forecast_df.iterrows():
+    print(f"  {str(date.date()):<14}  {row['Forecast_cfs']:.1f}")
+
+recent_cfs = recent['streamflow_cfs'].iloc[-30:]
 
 fig, ax = plt.subplots(figsize=(10, 4))
 ax.plot(recent_cfs.index, recent_cfs.values,
