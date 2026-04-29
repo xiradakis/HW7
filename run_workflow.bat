@@ -19,7 +19,7 @@ set TEST_END=2024-12-31
 
 set FORECAST_DATE=2025-04-30
 set REFIT_MODEL=True
-set RUN_VALIDATION=True
+set RUN_VALIDATION=FALSE
 set MODEL=day_of_week
 
 REM =============================================================================
