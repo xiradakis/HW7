@@ -41,9 +41,18 @@ python train_model.py --email YOUR_EMAIL@example.com --pin YOUR_PIN [OPTIONS]
 - `--train-end` (default: 2022-12-31): Training period end date
 - `--test-start` (default: 2023-01-01): Test period start date
 - `--test-end` (default: 2024-12-31): Test period end date
-- `--model` (default: longterm_avg): Model type
+- `--model` (default: longterm_avg): Model type (`longterm_avg` or `day_of_week`)
 - `--refit` (default: True): Re-fit model from scratch
 - `--validate` (default: True): Run validation and show plots
+
+**Example:**
+```bash
+# Train long-term average model
+python train_model.py --email you@example.com --pin 1234 --model longterm_avg
+
+# Train day-of-week model
+python train_model.py --email you@example.com --pin 1234 --model day_of_week --validate True
+```
 
 ### `generate_forecast.py`
 Generates a 5-day streamflow forecast using the trained model.
@@ -59,17 +68,26 @@ python generate_forecast.py --email YOUR_EMAIL@example.com --pin YOUR_PIN [OPTIO
 - `--gauge-id` (default: 09506000): USGS gauge ID
 - `--ar-order` (default: 7): Number of lag days
 - `--forecast-date` (default: 2024-04-30): Start date for 5-day forecast (YYYY-MM-DD)
-- `--model` (default: longterm_avg): Model type
+- `--model` (default: longterm_avg): Model type (`longterm_avg` or `day_of_week`)
+
+**Example:**
+```bash
+# Generate forecast with long-term average model
+python generate_forecast.py --email you@example.com --pin 1234 --forecast-date 2024-05-01
+
+# Generate forecast with day-of-week model
+python generate_forecast.py --email you@example.com --pin 1234 --model day_of_week --forecast-date 2024-05-01
+```
 
 ### `forecast_functions.py`
 Contains shared utility functions used by both training and forecasting scripts:
 - `get_training_test_data()`: Downloads and splits streamflow data
 - `get_recent_data()`: Retrieves recent observations for forecasting
-- `fit_longterm_avg_model()`: Fits the long-term average model
-- `make_5day_forecast_longterm()`: Generates 5-day predictions
-- `compute_metrics()`: Calculates validation metrics (NSE, RMSE, etc.)
-- `plot_validation()`: Visualizes model performance
-- `save_model()` / `load_model()`: Model persistence
+- `fit_longterm_avg_model()`: Fits the long-term average model (returns mean flow)
+- `make_5day_forecast_longterm()`: Generates 5-day predictions using long-term mean
+- `compute_metrics()`: Calculates validation metrics (NSE, RMSE, R², etc.)
+- `plot_validation()`: Visualizes model performance on test set
+- `save_model()` / `load_model()`: Model persistence (pickle-based)
 
 ### `run_workflow.sh` (Linux/macOS)
 Complete driver script that prompts for HydroFrame credentials and runs the full workflow:
@@ -124,19 +142,77 @@ python generate_forecast.py --email your@email.com --pin YOUR_PIN --forecast-dat
 
 ## Key Parameters
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| gauge-id | 09506000 | USGS gauge for Verde River near Camp Verde, AZ |
-| ar-order | 7 | Autoregressive lag order (days) |
-| train-start | 1990-01-01 | Training period start |
-| train-end | 2022-12-31 | Training period end |
-| test-start | 2023-01-01 | Test/validation period start |
-| test-end | 2024-12-31 | Test/validation period end |
-| forecast-date | 2024-04-30 | Start date for 5-day forecast |
+| Parameter | Default | Description | Notes |
+|-----------|---------|-------------|-------|
+| gauge-id | 09506000 | USGS gauge for Verde River near Camp Verde, AZ | — |
+| ar-order | 7 | Autoregressive lag order (days) | Used for recent data validation |
+| train-start | 1990-01-01 | Training period start | Long-term avg model only |
+| train-end | 2022-12-31 | Training period end | Long-term avg model only |
+| test-start | 2023-01-01 | Test/validation period start | Validation only |
+| test-end | 2024-12-31 | Test/validation period end | Validation only |
+| forecast-date | 2024-04-30 | Start date for 5-day forecast | Must have recent observations available |
+| model | longterm_avg | Model selection | `longterm_avg` or `day_of_week` |
 
-## Model
+## Models
 
-**Long-term Average Model**: Predicts streamflow as the mean of all observations in the training period. Provides a baseline for comparison with more sophisticated approaches.
+This project implements two streamflow forecasting models:
+
+### Long-term Average Model
+Predicts streamflow as the **mean of all observations in the training period**. Provides a simple baseline for comparison.
+
+**Characteristics:**
+- Constant prediction for every day
+- Mean streamflow typically ~1000–2000 cfs for Verde River
+- Simple, interpretable, computationally efficient
+- Provides baseline accuracy metric
+
+**Use case:** Baseline reference; useful when recent observations are unavailable.
+
+### Day-of-Week Model
+Assigns different streamflow values based on the **day of the week**. Captures weekly patterns in river flows.
+
+**Flow assignments:**
+- **Monday**: 800 cfs (rivers start the week strong)
+- **Tuesday**: 650 cfs (still flowing well)
+- **Wednesday**: 500 cfs (midweek slump)
+- **Thursday**: 350 cfs (almost Friday)
+- **Friday**: 200 cfs (rivers take it easy)
+- **Saturday**: 450 cfs (weekend rebound)
+- **Sunday**: 600 cfs (resting up for Monday)
+
+**Characteristics:**
+- Cyclical pattern repeats weekly
+- Captures human-influenced flow patterns
+- Fast prediction based on calendar
+- Does not use recent observations
+
+**Use case:** Exploratory model; demonstrates weekly periodicity in streamflow data.
+
+## Model Selection
+
+Choose your model via the `--model` flag:
+
+```bash
+# Use long-term average (smooth, constant predictions)
+python train_model.py --email you@example.com --pin 1234 --model longterm_avg
+python generate_forecast.py --email you@example.com --pin 1234 --model longterm_avg
+
+# Use day-of-week (weekly pattern predictions)
+python train_model.py --email you@example.com --pin 1234 --model day_of_week
+python generate_forecast.py --email you@example.com --pin 1234 --model day_of_week
+```
+
+### Model Comparison
+
+| Feature | Long-term Average | Day-of-Week |
+|---------|-------------------|-------------|
+| **Prediction** | Constant mean flow | Varies by day of week |
+| **Training required** | Yes (computes mean) | Minimal (uses fixed values) |
+| **Validation** | Full test set evaluation | N/A |
+| **Refit needed** | When training data changes | Not applicable |
+| **Accuracy** | Baseline metric (usually poor) | Exploratory (captures cycles) |
+| **Use case** | Reference forecast | Pattern detection |
+| **Computational cost** | Minimal | Negligible |
 
 ## Output
 
